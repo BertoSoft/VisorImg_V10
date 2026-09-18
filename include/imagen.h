@@ -1,8 +1,14 @@
 
 #ifndef IMAGEN_H
+#define IMAGEN_H
 
 
-//1.- Extructuras
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+
+
+//1.- Estructuras
 
 typedef struct {
     unsigned char   *pixels;
@@ -35,7 +41,29 @@ typedef struct {
 }InfoHeader;
 #pragma pack(pop)
 
+// 2.- ENUMS
+typedef enum{
+    IMG_OK = 0,
+    ERROR_FILE_NOT_FOUND,
+    ERROR_FORMATO_NO_RECONOCIDO,
+    ERROR_MEMORIA_INSUFICIENTE
+}ERROR_IMG;
 
+typedef enum{
+    IMG_BMP = 0,
+    IMG_PNG,
+    IMG_JPG,
+    IMG_JPEG,
+    IMG_ERROR,
+    IMG_DESCONOCIDA
+}TipoImagen;
+
+// 3.- Funciones
+
+ERROR_IMG   getRutaImagen(char *ruta, size_t tamano);
+const char *getError(ERROR_IMG error);
+TipoImagen  getTipoImagen(const char *ruta);
+ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer **imagen);
 
 
 #endif
