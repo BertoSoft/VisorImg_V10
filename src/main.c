@@ -8,7 +8,14 @@
 int main(){
     char            ruta[1024] = {0};
     ERROR_IMG       error = ERROR_FILE_NOT_FOUND;
-    ImagenBuffer    *imagen = NULL;
+    ImagenBuffer    *imagen = (ImagenBuffer *)malloc(sizeof(ImagenBuffer));
+
+    //Inicializamos imagen, con pixels a nulo
+    if(!imagen){
+        printf("Memoria insuficiente...");
+        return -1;
+    }
+    imagen->pixels = NULL;
 
     // Pedimos la ruta de la imagen
     if((error = getRutaImagen(ruta, 1024)) != IMG_OK){
@@ -20,7 +27,7 @@ int main(){
     switch (getTipoImagen(ruta))
     {
     case IMG_BMP:
-        if(bmpToImagenBuffer(ruta, &imagen) != IMG_OK){
+        if(bmpToImagenBuffer(ruta, imagen) != IMG_OK){
             printf("No se puede leer el archivo...");
             return -1;
         } 

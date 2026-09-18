@@ -2,7 +2,6 @@
 #ifndef IMAGEN_H
 #define IMAGEN_H
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -10,8 +9,14 @@
 
 //1.- Estructuras
 
+typedef struct{
+    unsigned char rojo;
+    unsigned char verde;
+    unsigned char azul;
+}PixelRGB;
+
 typedef struct {
-    unsigned char   *pixels;
+    PixelRGB        *pixels;
     int             ancho;
     int             alto;
     int             channels;
@@ -63,7 +68,7 @@ typedef enum{
 ERROR_IMG   getRutaImagen(char *ruta, size_t tamano);
 const char *getError(ERROR_IMG error);
 TipoImagen  getTipoImagen(const char *ruta);
-ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer **imagen);
+ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
 
 
 #endif

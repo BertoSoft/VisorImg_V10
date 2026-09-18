@@ -75,7 +75,7 @@ TipoImagen getTipoImagen(const char *ruta){
     return IMG_DESCONOCIDA;
 }
 
-ERROR_IMG bmpToImagenBuffer(const char *ruta, ImagenBuffer **imagen){
+ERROR_IMG bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen){
     FileHeader      fileHeader;
     InfoHeader      infoHeader;
 
@@ -88,57 +88,15 @@ ERROR_IMG bmpToImagenBuffer(const char *ruta, ImagenBuffer **imagen){
             return ERROR_FORMATO_NO_RECONOCIDO;
     }
 
-     //reservamos la memoria de la estructura
-    *imagen = (ImagenBuffer *)malloc(sizeof(ImagenBuffer));
-    if(!(*imagen)){
-        fclose(file);
-        return ERROR_MEMORIA_INSUFICIENTE;
-    }
 
-    // Rellenamos valores
-    (*imagen)->ancho        = infoHeader.width;
-    (*imagen)->alto         = abs(infoHeader.height);
-    (*imagen)->channels     = infoHeader.bitCount/8;
+    // Aqui metemos los datos en imagen->
 
-    // reservamos la memoria de pixels
-    size_t tamano = (*imagen)->ancho * (*imagen)->alto * (*imagen)->channels;
-    (*imagen)->pixels = (unsigned char *)malloc(tamano);
-    if(!(*imagen)->pixels){
-        // CORRECCIÓN: Liberamos la estructura previa para evitar fugas de memoria (Memory Leak)
-        free(*imagen);
-        *imagen = NULL;
-        fclose(file);
-        return ERROR_MEMORIA_INSUFICIENTE;
-    }
 
-     // CORRECCIÓN: Calcular el padding por fila en el archivo BMP
-    int relleno = (4 - ((*imagen)->ancho * (*imagen)->channels) % 4) % 4;
 
-    // situamos el punteero
-    fseek(file, fileHeader.offset, SEEK_SET);
 
-    // copiamos los datos
-    //recorremos las filas de la imagen
-    for(int i=0;i < (*imagen)->alto; i++){
-        // calculamos fila destino en imagen->pixels
-        int fila_destino = (infoHeader.height > 0) ? ((*imagen)->alto -1 -i) : i;
 
-        // Puntero a fila destino
-        unsigned char   *ptr_fila_destino   = &((*imagen)->pixels[fila_destino * (*imagen)->ancho * (*imagen)->channels]);
 
-        // leemos toda la fila
-        fread(ptr_fila_destino, sizeof(unsigned char), (*imagen)->ancho * (*imagen)->channels, file);
 
-        // corregimos los colores de 3 en 3 o de 4 en 4 para pasar de BGR -> RGB
-        for(int j=0; j<((*imagen)->ancho * (*imagen)->channels); j+= (*imagen)->channels){
-            unsigned char temporal = ptr_fila_destino[j];  // azul-> temporal
-            ptr_fila_destino[j] = ptr_fila_destino[j+2];    // Rojo pasa al sitio del azul
-            ptr_fila_destino[j+2] = temporal;               // El azul pasa al ultimo puesto
-            // si existe cuarto canal se queda como esta
-        }
-        // CORRECCIÓN: Saltar los bytes de padding al terminar de leer la fila en el archivo
-        fseek(file, relleno, SEEK_CUR);
-    }
 
     fclose(file);
     return IMG_OK;
