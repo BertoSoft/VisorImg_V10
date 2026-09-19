@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 
 //1.- Estructuras
@@ -13,10 +15,11 @@ typedef struct{
     unsigned char rojo;
     unsigned char verde;
     unsigned char azul;
-}PixelRGB;
+    unsigned char alfa;
+}PixelRGBA;
 
 typedef struct {
-    PixelRGB        *pixels;
+    PixelRGBA       *pixels;
     int             ancho;
     int             alto;
     int             channels;
@@ -69,6 +72,7 @@ ERROR_IMG   getRutaImagen(char *ruta, size_t tamano);
 const char *getError(ERROR_IMG error);
 TipoImagen  getTipoImagen(const char *ruta);
 ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
+ERROR_IMG   imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage);
 
 
 #endif

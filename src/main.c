@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 #include "imagen.h"
 
@@ -49,7 +51,56 @@ int main(){
         return -1;
     }
 
-    // Si estamos aqui es que tenemo la imagen en imagen->pixels en formato RGB
+    // Si estamos aqui es que tenemo la imagen en imagen->pixels en formato RGBA
+    Display *display = XOpenDisplay(NULL);
+    if(!display){
+        printf("Error al conectar con el servidor X11..");
+        return -1;
+    }
+    int screen = DefaultScreen(display);
+    Visual *visual = DefaultVisual(display, screen);
+    int depth = DefaultDepth(display, screen);
+    
+    // Reservamos la memoria del buffer X11
+    char *buffer_x11 = (char *)malloc(imagen->ancho * imagen->alto * 4);
+    if(!buffer_x11){
+        printf("Memoria insuficiente...");
+        XCloseDisplay(display);
+        return -1;
+    }
+
+    XImage *ximage = XCreateImage(
+        display,
+        visual,
+        depth,
+        ZPixmap,
+        0,
+        buffer_x11,
+        imagen->ancho,
+        imagen->alto,
+        32,
+        0
+    );
+
+    if(!ximage){
+        printf("Error al crear XImage");
+        free(buffer_x11);
+        XCloseDisplay(display);
+        return -1;
+    }
+
+    // Ponemos imagen en ximagen
+    if(imagenBufferToXImage(imagen, ximage) != IMG_OK){
+        printf("Error al convertir imagen -> ximagen...");
+        free(buffer_x11);
+        XCloseDisplay(display);
+        return -1;
+    }
+    
+
+
+
+    printf(" XImage creada con exito");
 
 
 
@@ -58,20 +109,24 @@ int main(){
 
 
 
+     // ==========================================
+    // 3. MOMENTO DE LIBERAR (Al final del programa)
+    // ==========================================
+    if (ximage != NULL) {
+        // ¡Ojo! XDestroyImage libera la estructura Y TAMBIÉN hace free() de 'x11_buffer' 
+        // de forma automática porque se lo asociamos en XCreateImage.
+        XDestroyImage(ximage); 
+    }
 
+    if (display != NULL) {
+        XCloseDisplay(display);
+    }
 
-
-
-
-    // 3. MOMENTO DE LIBERAR (Justo antes de salir del programa)
     if (imagen != NULL) {
-        // Primero liberamos el array interno de píxeles
         if (imagen->pixels != NULL) {
             free(imagen->pixels);
         }
-        // Después liberamos la estructura contenedora
         free(imagen);
     }
-
     return 0;
 }

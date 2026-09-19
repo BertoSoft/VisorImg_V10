@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 #include "imagen.h"
 #include "tinyfiledialogs.h"
@@ -88,17 +90,89 @@ ERROR_IMG bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen){
             return ERROR_FORMATO_NO_RECONOCIDO;
     }
 
+    // Obtenemos la profundidad
+    int bpp = infoHeader.bitCount;
+    if((bpp != 24 && bpp != 32) || infoHeader.compression != 0){
+        fclose(file);
+        return ERROR_FORMATO_NO_RECONOCIDO;
+    }
 
-    // Aqui metemos los datos en imagen->
+    // Asignamos propiedades a imagen
+    imagen->ancho = infoHeader.width;
+    imagen->alto = abs(infoHeader.height);
+    imagen->channels = (bpp == 32) ? 4 : 3;
 
+    // Reservamos la memoria para pixels
+    imagen->pixels = (PixelRGBA *)malloc(imagen->ancho * imagen->alto * sizeof(PixelRGBA));
+    if(!imagen->pixels){
+        fclose(file);
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
 
+    // posicionamos el puntero
+    fseek(file, fileHeader.offset, SEEK_SET);
 
+    //Obtenemos el relleno
+    int bytes_por_pixel = bpp / 8;
+    int relleno = (4 - (imagen->ancho * bytes_por_pixel) % 4) % 4;
 
+    // 1.- Recorremos las filas
+    for(int i=0; i<imagen->alto; i++){
+        int fila_destino = (infoHeader.height > 0) ? (imagen->alto -1 -i) : i;
 
+        //2.- Recorremos las columnas
+        for(int j=0; j<imagen->ancho; j++){
 
+            // 3.- Leemos un pixel
+            unsigned char pixel[4];
+            fread(pixel, sizeof(unsigned char), bytes_por_pixel, file);
 
+            // 4.- Obtenemos el indice de destino en el imagen->pixels
+            int indice_destino = (fila_destino * imagen->ancho) + j;
+
+            // 5.- MApeamos los valores RGB
+            imagen->pixels[indice_destino].rojo    = pixel[2];
+            imagen->pixels[indice_destino].verde   = pixel[1];
+            imagen->pixels[indice_destino].azul    = pixel[0];
+
+            // 6.- Canal alfa
+            imagen->pixels[indice_destino].alfa    = (bpp == 32) ? pixel[3] : 255;
+        }
+
+        //7.-  Ahora el relleno de cada fila
+        if (relleno > 0) {
+            fseek(file, relleno, SEEK_CUR);
+        }
+    }
 
     fclose(file);
+    return IMG_OK;
+}
+
+ERROR_IMG imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage){
+    if(!imagen || !imagen->pixels || !ximage || !ximage->data){
+        return ERROR_FILE_NOT_FOUND;
+    }
+    if(imagen->ancho != ximage->width || imagen->alto != ximage->height){
+        return ERROR_FORMATO_NO_RECONOCIDO;
+    }
+
+    // Asignamos a x11_buffer la direccion de memoria de ximage->data
+    unsigned char *x11_buffer = (unsigned char *)ximage->data;
+
+    int bytes_por_pixel = ximage->bits_per_pixel / 8;
+    
+    //MApeamos los valores imagen->pixels RGBA a ximage->data BGRA
+    for(int i=0; i<(imagen->ancho * imagen->alto); i++){
+        int idx = i * bytes_por_pixel;
+
+        x11_buffer[idx + 0] = imagen->pixels[i].azul;
+        x11_buffer[idx + 1] = imagen->pixels[i].verde;
+        x11_buffer[idx + 2] = imagen->pixels[i].rojo;
+        
+        x11_buffer[idx + 3] = imagen->pixels[i].alfa;
+    }
+
     return IMG_OK;
 }
 
