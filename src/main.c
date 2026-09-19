@@ -26,29 +26,31 @@ int main(){
     }
 
     // Obtenemos el tipo de imagen y la pasamos a memoria
-    switch (getTipoImagen(ruta))
-    {
-    case IMG_BMP:
-        if(bmpToImagenBuffer(ruta, imagen) != IMG_OK){
-            printf("No se puede leer el archivo...");
+    switch (getTipoImagen(ruta)){
+        case IMG_BMP:
+            if(bmpToImagenBuffer(ruta, imagen) != IMG_OK){
+                printf("No se puede leer el archivo...");
+                return -1;
+            } 
+            break;
+        case IMG_PNG:
+            if(pngToImagenBuffer(ruta, imagen) != IMG_OK){
+                printf("No se puede leer el archivo...");
+                return -1;
+            } 
+            break;
+        case IMG_JPG:
+            /* code */
+            break;
+        case IMG_JPEG:
+            /* code */
+            break;
+        case IMG_ERROR:
+            printf("No se puede abrir el fichero ...");
             return -1;
-        } 
-        break;
-    case IMG_PNG:
-        /* code */
-        break;
-    case IMG_JPG:
-        /* code */
-        break;
-    case IMG_JPEG:
-        /* code */
-        break;
-    case IMG_ERROR:
-        printf("No se puede abrir el fichero ...");
-        return -1;
-    default:
-        printf("Formato de imagen no compatible\n");
-        return -1;
+        default:
+            printf("Formato de imagen no compatible\n");
+            return -1;
     }
 
     // Obtenemos el display

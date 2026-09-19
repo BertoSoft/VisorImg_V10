@@ -6,6 +6,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+#include <png.h>
 
 #include "imagen.h"
 #include "tinyfiledialogs.h"
@@ -276,3 +277,46 @@ ERROR_IMG showXImage(Display *display, XImage *ximage){
     return IMG_OK;
 }
 
+ERROR_IMG pngToImagenBuffer(const char *ruta, ImagenBuffer *imagen){
+    
+    // Comprobacion inicial
+    if(!ruta || !imagen){
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    // Abrimos el archivo fisico
+    FILE *file = fopen(ruta, "rb");
+    if(!file){
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    //Estructura principal del lectura png
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if(!png_ptr){
+        fclose(file);
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
+    png_infop info_ptr = png_create_info_struct(png_ptr); 
+    if(!info_ptr){
+        png_destroy_read_struct(&png_ptr, NULL, NULL);
+        fclose(file);
+    }
+
+     // 4. Configurar el punto de restauración de errores
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        // Si libpng falla en cualquier punto posterior, el flujo saltará mágicamente aquí.
+        // Limpiamos todo lo creado hasta el momento y salimos con error.
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(file);
+        return ERROR_FORMATO_NO_RECONOCIDO;
+    }
+
+    // vinculamos el archivo fisico con el manejador de libpng
+    png_init_io(png_ptr, file);
+
+    // leemos los metadatos
+    png_read_info(png_ptr, info_ptr);
+
+
+    return IMG_OK;
+}

@@ -75,6 +75,7 @@ ERROR_IMG   getRutaImagen(char *ruta, size_t tamano);
 const char *getError(ERROR_IMG error);
 TipoImagen  getTipoImagen(const char *ruta);
 ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
+ERROR_IMG   pngToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
 ERROR_IMG   imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage);
 XImage      *initXImage(Display *display, ImagenBuffer *imagen);
 ERROR_IMG   showXImage(Display *display, XImage *ximage);
