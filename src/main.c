@@ -51,52 +51,41 @@ int main(){
         return -1;
     }
 
-    // Si estamos aqui es que tenemo la imagen en imagen->pixels en formato RGBA
+    // Obtenemos el display
     Display *display = XOpenDisplay(NULL);
     if(!display){
         printf("Error al conectar con el servidor X11..");
         return -1;
     }
-    int screen = DefaultScreen(display);
-    Visual *visual = DefaultVisual(display, screen);
-    int depth = DefaultDepth(display, screen);
-    
-    // Reservamos la memoria del buffer X11
-    char *buffer_x11 = (char *)malloc(imagen->ancho * imagen->alto * 4);
-    if(!buffer_x11){
-        printf("Memoria insuficiente...");
-        XCloseDisplay(display);
-        return -1;
-    }
-
-    XImage *ximage = XCreateImage(
-        display,
-        visual,
-        depth,
-        ZPixmap,
-        0,
-        buffer_x11,
-        imagen->ancho,
-        imagen->alto,
-        32,
-        0
-    );
-
+   
+    // Creamos la ximage
+    XImage *ximage = initXImage(display, imagen);
     if(!ximage){
-        printf("Error al crear XImage");
-        free(buffer_x11);
+        printf("Error al crear XImage\n");
         XCloseDisplay(display);
+        if(imagen->pixels) free(imagen->pixels);
+        free(imagen);
         return -1;
     }
 
     // Ponemos imagen en ximagen
     if(imagenBufferToXImage(imagen, ximage) != IMG_OK){
-        printf("Error al convertir imagen -> ximagen...");
-        free(buffer_x11);
+        printf("Error al convertir imagen -> ximagen...\n");
+        XDestroyImage(ximage);
         XCloseDisplay(display);
+        if(imagen->pixels) free(imagen->pixels);
+        free(imagen);
         return -1;
     }
-    
+
+    //enseñamos la imagen
+    if(showXImage(display, ximage) != IMG_OK){
+        printf("Error al abrir XWindow...\n");
+        XDestroyImage(ximage);
+        XCloseDisplay(display);
+        if(imagen->pixels) free(imagen->pixels);
+        free(imagen);
+    }
 
 
 
@@ -113,14 +102,11 @@ int main(){
     // 3. MOMENTO DE LIBERAR (Al final del programa)
     // ==========================================
     if (ximage != NULL) {
-        // ¡Ojo! XDestroyImage libera la estructura Y TAMBIÉN hace free() de 'x11_buffer' 
-        // de forma automática porque se lo asociamos en XCreateImage.
-        XDestroyImage(ximage); 
+        XDestroyImage(ximage); // Libera la estructura y 'buffer_x11'
     }
 
-    if (display != NULL) {
-        XCloseDisplay(display);
-    }
+    // Cerramos el display al final, después de destruir la XImage
+    XCloseDisplay(display);
 
     if (imagen != NULL) {
         if (imagen->pixels != NULL) {
@@ -130,3 +116,4 @@ int main(){
     }
     return 0;
 }
+

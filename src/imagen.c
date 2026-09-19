@@ -5,6 +5,7 @@
 #include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/keysym.h>
 
 #include "imagen.h"
 #include "tinyfiledialogs.h"
@@ -176,4 +177,102 @@ ERROR_IMG imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage){
     return IMG_OK;
 }
 
+XImage *initXImage(Display *display,ImagenBuffer *imagen){
+    int screen = DefaultScreen(display);
+    Visual *visual = DefaultVisual(display, screen);
+    int depth = DefaultDepth(display, screen);
+    
+    // Reservamos la memoria del buffer X11
+    char *buffer_x11 = (char *)malloc(imagen->ancho * imagen->alto * 4);
+    if(!buffer_x11){
+        printf("Memoria insuficiente...");
+        XCloseDisplay(display);
+        return NULL;
+    }
+
+    XImage *ximage = XCreateImage(
+        display,
+        visual,
+        depth,
+        ZPixmap,
+        0,
+        buffer_x11,
+        imagen->ancho,
+        imagen->alto,
+        32,
+        0
+    );
+    return ximage;
+}
+
+ERROR_IMG showXImage(Display *display, XImage *ximage){
+    if(!display || !ximage){
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
+
+    int     scr     = DefaultScreen(display);
+    Window  root    = DefaultRootWindow(display);
+
+    Window ventana = XCreateSimpleWindow(
+        display, 
+        root, 
+        100, 100,            // Posición inicial en la pantalla (x, y)
+        ximage->width,       // Ancho de la ventana igual al de la imagen
+        ximage->height,      // Alto de la ventana igual al de la imagen
+        1,                   // Ancho del borde
+        BlackPixel(display, scr), // Color del borde
+        WhitePixel(display, scr)  // Color de fondo
+    );
+    // Titulo ventana
+    XStoreName(display, ventana, NOMBRE_APP);
+
+    // 3. Seleccionar los eventos que queremos escuchar
+    // ExposeMask: Nos avisa cuándo debemos redibujar la ventana (ej. al abrirse o maximizarse)
+    // KeyPressMask: Captura pulsaciones de teclado para poder cerrar la ventana
+    XSelectInput(display, ventana, ExposureMask | KeyPressMask);
+
+    // 4. Crear el Contexto Gráfico (GC) necesario para dibujar
+    GC gc = XCreateGC(display, ventana, 0, NULL);
+
+    // 5. Hacer visible la ventana en la pantalla
+    XMapWindow(display, ventana);
+
+    // Bucle de eventos
+    XEvent event;
+    int ejecutar = 1;
+    while (ejecutar){
+        XNextEvent(display, &event);
+
+        switch (event.type)
+        {
+        case Expose:
+            XPutImage(
+                display,
+                ventana,
+                gc,
+                ximage,
+                0,              // X de imagen origen
+                0,              // Y de imagen origen
+                0,              // X de imagen destino
+                0,              // Y de imagen destino
+                ximage->width,
+                ximage->height
+            );
+            XFlush(display);
+            break;
+
+        case KeyPress:
+            KeySym keySim = XLookupKeysym(&event.xkey, 0);
+            if(keySim == XK_Escape){
+                ejecutar = 0;
+            }
+            break;
+        }
+    }
+    
+    // 7. Limpieza local de recursos de la ventana antes de salir
+    XFreeGC(display, gc);
+    XDestroyWindow(display, ventana);
+    return IMG_OK;
+}
 

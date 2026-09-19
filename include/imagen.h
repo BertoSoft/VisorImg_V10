@@ -8,6 +8,9 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
+// 0.- Ctes Globales
+#define NOMBRE_APP "Visor de Imagenes V1.0"
+
 
 //1.- Estructuras
 
@@ -73,6 +76,8 @@ const char *getError(ERROR_IMG error);
 TipoImagen  getTipoImagen(const char *ruta);
 ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
 ERROR_IMG   imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage);
+XImage      *initXImage(Display *display, ImagenBuffer *imagen);
+ERROR_IMG   showXImage(Display *display, XImage *ximage);
 
 
 #endif
