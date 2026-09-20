@@ -15,7 +15,7 @@ all: $(TARGET)
 
 # Cómo construir el binario final
 $(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) -lX11 -lpng
+	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) -lX11 -lpng -ljpeg
 
 # Regla para limpiar los archivos generados
 clean:

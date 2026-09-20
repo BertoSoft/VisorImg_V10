@@ -8,114 +8,81 @@
 #include "imagen.h"
 
 int main(){
-    char            ruta[1024] = {0};
-    ERROR_IMG       error = ERROR_FILE_NOT_FOUND;
-    ImagenBuffer    *imagen = (ImagenBuffer *)malloc(sizeof(ImagenBuffer));
+    char            ruta[1024]  = {0};
+    ERROR_IMG       error       = ERROR_FILE_NOT_FOUND;
+    ImagenBuffer    *imagen     = (ImagenBuffer *)malloc(sizeof(ImagenBuffer));
+    Display         *display    = NULL;
+    XImage          *ximage     = NULL;
 
-    //Inicializamos imagen, con pixels a nulo
+    //1.- Inicializamos imagen, con pixels a nulo
     if(!imagen){
         printf("Memoria insuficiente...");
         return -1;
     }
     imagen->pixels = NULL;
 
-    // Pedimos la ruta de la imagen
+    //2.- Pedimos la ruta de la imagen
     if((error = getRutaImagen(ruta, 1024)) != IMG_OK){
         printf("Error: %s\n", getError(error));
-        return -1;
+        goto cleanup;
     }
 
-    // Obtenemos el tipo de imagen y la pasamos a memoria
+    //3.- Obtenemos el tipo de imagen y la pasamos a memoria
+    error = ERROR_FORMATO_NO_RECONOCIDO;
     switch (getTipoImagen(ruta)){
-        case IMG_BMP:
-            if(bmpToImagenBuffer(ruta, imagen) != IMG_OK){
-                printf("No se puede leer el archivo...");
-                return -1;
-            } 
-            break;
-        case IMG_PNG:
-            if(pngToImagenBuffer(ruta, imagen) != IMG_OK){
-                printf("No se puede leer el archivo...");
-                return -1;
-            } 
-            break;
-        case IMG_JPG:
-            /* code */
-            break;
-        case IMG_JPEG:
-            /* code */
-            break;
+        case IMG_BMP:   error = bmpToImagenBuffer(ruta, imagen); break;
+        case IMG_PNG:   error = pngToImagenBuffer(ruta, imagen); break;
+        case IMG_JPG:   error = jpgToImagenBuffer(ruta, imagen); break;
+        case IMG_JPEG:  error = jpgToImagenBuffer(ruta, imagen); break;
         case IMG_ERROR:
             printf("No se puede abrir el fichero ...");
-            return -1;
+            goto cleanup;
         default:
             printf("Formato de imagen no compatible\n");
-            return -1;
+            goto cleanup;
     }
 
-    // Obtenemos el display
-    Display *display = XOpenDisplay(NULL);
+    if (error != IMG_OK) {
+        printf("Error al procesar los píxeles de la imagen...\n");
+        goto cleanup;
+    }
+
+    // 4.- Obtenemos el display
+    display = XOpenDisplay(NULL);
     if(!display){
         printf("Error al conectar con el servidor X11..");
-        return -1;
+        goto cleanup;
     }
    
-    // Creamos la ximage
-    XImage *ximage = initXImage(display, imagen);
+    // 5.- Creamos la ximage
+    ximage = initXImage(display, imagen);
     if(!ximage){
         printf("Error al crear XImage\n");
-        XCloseDisplay(display);
-        if(imagen->pixels) free(imagen->pixels);
-        free(imagen);
-        return -1;
+        goto cleanup;
     }
 
-    // Ponemos imagen en ximagen
+    // 6.- Ponemos imagen en ximagen
     if(imagenBufferToXImage(imagen, ximage) != IMG_OK){
         printf("Error al convertir imagen -> ximagen...\n");
-        XDestroyImage(ximage);
-        XCloseDisplay(display);
-        if(imagen->pixels) free(imagen->pixels);
-        free(imagen);
-        return -1;
+        goto cleanup;
     }
 
-    //enseñamos la imagen
+    // 7.- Enseñamos la imagen
     if(showXImage(display, ximage) != IMG_OK){
         printf("Error al abrir XWindow...\n");
-        XDestroyImage(ximage);
-        XCloseDisplay(display);
-        if(imagen->pixels) free(imagen->pixels);
-        free(imagen);
+        goto cleanup;
     }
 
-
-
-    printf(" XImage creada con exito");
-
-
-
-
-
-
-
-
-     // ==========================================
-    // 3. MOMENTO DE LIBERAR (Al final del programa)
-    // ==========================================
-    if (ximage != NULL) {
-        XDestroyImage(ximage); // Libera la estructura y 'buffer_x11'
-    }
-
-    // Cerramos el display al final, después de destruir la XImage
-    XCloseDisplay(display);
-
-    if (imagen != NULL) {
-        if (imagen->pixels != NULL) {
-            free(imagen->pixels);
+    // 8.- Cierre unificado de recursos (evita repetir código en cada IF)
+    cleanup:
+        if (ximage) XDestroyImage(ximage); 
+        if (display) XCloseDisplay(display);
+        if (imagen) {
+            if (imagen->pixels) free(imagen->pixels);
+            free(imagen);
         }
-        free(imagen);
-    }
+
+
     return 0;
 }
 

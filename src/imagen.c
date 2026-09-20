@@ -7,6 +7,8 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <png.h>
+#include <jpeglib.h>
+#include <setjmp.h>
 
 #include "imagen.h"
 #include "tinyfiledialogs.h"
@@ -207,6 +209,9 @@ XImage *initXImage(Display *display,ImagenBuffer *imagen){
 }
 
 ERROR_IMG showXImage(Display *display, XImage *ximage){
+    int ancho_ventana = ximage->width;
+    int alto_ventana = ximage->height;
+
     if(!display || !ximage){
         return ERROR_MEMORIA_INSUFICIENTE;
     }
@@ -230,7 +235,7 @@ ERROR_IMG showXImage(Display *display, XImage *ximage){
     // 3. Seleccionar los eventos que queremos escuchar
     // ExposeMask: Nos avisa cuándo debemos redibujar la ventana (ej. al abrirse o maximizarse)
     // KeyPressMask: Captura pulsaciones de teclado para poder cerrar la ventana
-    XSelectInput(display, ventana, ExposureMask | KeyPressMask);
+    XSelectInput(display, ventana, ExposureMask | KeyPressMask | StructureNotifyMask);
 
     // 4. Crear el Contexto Gráfico (GC) necesario para dibujar
     GC gc = XCreateGC(display, ventana, 0, NULL);
@@ -247,19 +252,30 @@ ERROR_IMG showXImage(Display *display, XImage *ximage){
         switch (event.type)
         {
         case Expose:
+            XClearWindow(display, ventana);
+            int dest_x = (ancho_ventana - ximage->width) / 2;
+            int dest_y = (alto_ventana -ximage->height) / 2;
+            if(dest_x < 0) dest_x = 0;
+            if(dest_y < 0) dest_y = 0;
+
             XPutImage(
                 display,
                 ventana,
                 gc,
                 ximage,
-                0,              // X de imagen origen
-                0,              // Y de imagen origen
-                0,              // X de imagen destino
-                0,              // Y de imagen destino
+                0,                  // X de imagen origen
+                0,                  // Y de imagen origen
+                dest_x,             // X de imagen destino
+                dest_y,             // Y de imagen destino
                 ximage->width,
                 ximage->height
             );
             XFlush(display);
+            break;
+
+        case ConfigureNotify:
+            ancho_ventana = event.xconfigure.width;
+            alto_ventana = event.xconfigure.height;
             break;
 
         case KeyPress:
@@ -317,6 +333,167 @@ ERROR_IMG pngToImagenBuffer(const char *ruta, ImagenBuffer *imagen){
     // leemos los metadatos
     png_read_info(png_ptr, info_ptr);
 
+    //Extraemos las propiedades de la imagen
+    png_uint_32 ancho_png, alto_png;
+    int bit_depth, tipo_color;
+    png_get_IHDR(png_ptr, info_ptr, &ancho_png, &alto_png, &bit_depth, &tipo_color, NULL, NULL, NULL);
+    imagen->ancho = (int)ancho_png;
+    imagen->alto = (int)alto_png;
+
+    // Si la imagen está indexada (usa paleta), la expande a RGB directo
+    if(tipo_color == PNG_COLOR_TYPE_PALETTE){
+        png_set_palette_to_rgb(png_ptr);
+    }
+
+    // Si es escala de grises con menos de 8 bits, expande a 8 bits
+    if (tipo_color == PNG_COLOR_TYPE_GRAY && bit_depth < 8) {
+        png_set_expand_gray_1_2_4_to_8(png_ptr);
+    }
+
+    // Si tiene transparencia mediante un chunk tRNS, conviértela en un canal Alfa real
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+        png_set_tRNS_to_alpha(png_ptr);
+    }
+
+    // Si cada canal tiene 16 bits (HDR), los reduce a 8 bits que es lo que maneja tu estructura
+    if (bit_depth == 16) {
+        png_set_strip_16(png_ptr);
+    }
+
+    // Si es escala de grises pura, la pasa a RGB (R=G=B)
+    if (tipo_color == PNG_COLOR_TYPE_GRAY || tipo_color == PNG_COLOR_TYPE_GRAY_ALPHA) {
+        png_set_gray_to_rgb(png_ptr);
+    }
+
+    // Forzamos a que si falta el canal Alfa, se añada un relleno opaco (255) de forma automática
+    if (!(tipo_color & PNG_COLOR_MASK_ALPHA)) {
+        png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
+    }
+
+    // Aplicar los cambios en las estructuras de actualización de libpng
+    png_read_update_info(png_ptr, info_ptr);
+    
+    // Ahora garantizamos que siempre tendrá 4 canales (RGBA)
+    imagen->channels = 4; 
+
+    // REservamos memoria para los pixeles
+    imagen->pixels = (PixelRGBA *)malloc(imagen->ancho * imagen->alto * sizeof(PixelRGBA));
+    if(!imagen->pixels){
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(file);
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
+
+    // Creamos un puntero a filas exigido por png
+    png_bytepp fila_ptr = (png_bytepp)malloc(sizeof(png_bytep) * imagen->alto);
+    if(!fila_ptr){
+         free(imagen->pixels);
+        imagen->pixels = NULL;
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(file);
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
+
+    // Hacemos que cada puntero de fila apunte a una fila de imagen
+    for(int i=0; i<imagen->alto; i++){
+        fila_ptr[i] = (png_bytep)&imagen->pixels[i * imagen->ancho];
+    }
+
+    // Leemos toda la imagen de golpe
+    png_read_image(png_ptr, fila_ptr);
+
+    //Terminamos de leer
+    png_read_end(png_ptr, NULL);
+
+    // Liberaos memoria y retornamos
+    free(fila_ptr);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    fclose(file);
 
     return IMG_OK;
+}
+
+ERROR_IMG jpgToImagenBuffer(const char *ruta, ImagenBuffer *imagen){
+    if(!ruta || !imagen){
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    // abrimos el archivo
+    FILE *file = fopen(ruta, "rb");
+    if(!file){
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    // Declaramos las estructuras
+    struct jpeg_decompress_struct compress_info;
+    struct mi_error_mgr jerror;
+
+    // configurar el manejador de errrores personalizado
+    compress_info.err = jpeg_std_error(&jerror.pub);
+    jerror.pub.error_exit = mi_error_exit;
+    if (setjmp(jerror.setjmp_buffer)) {
+        jpeg_destroy_decompress(&compress_info);
+        fclose(file);
+        if (imagen->pixels) {
+            free(imagen->pixels);
+            imagen->pixels = NULL;
+        }
+        return ERROR_FORMATO_NO_RECONOCIDO;
+    }
+
+// Inicializar descompresión
+    jpeg_create_decompress(&compress_info);
+    jpeg_stdio_src(&compress_info, file);
+    jpeg_read_header(&compress_info, TRUE);
+
+    // Forzar a libjpeg a que siempre nos devuelva RGB de 3 canales (24 bits)
+    compress_info.out_color_space = JCS_RGB;
+    jpeg_start_decompress(&compress_info);
+
+    // Asignar propiedades a tu estructura unificada
+    imagen->ancho = compress_info.output_width;
+    imagen->alto = compress_info.output_height;
+    imagen->channels = 4; // Tu buffer final trabaja siempre con 4 canales (RGBA)
+
+    // Reservar memoria para los píxeles
+    imagen->pixels = (PixelRGBA *)malloc(imagen->ancho * imagen->alto * sizeof(PixelRGBA));
+    if (!imagen->pixels) {
+        jpeg_destroy_decompress(&compress_info);
+        fclose(file);
+        return ERROR_MEMORIA_INSUFICIENTE;
+    }
+
+    // Reservar un buffer temporal para almacenar una sola fila leída (3 bytes por píxel: RGB)
+    int row_stride = compress_info.output_width * compress_info.output_components;
+    JSAMPARRAY buffer = (*compress_info.mem->alloc_sarray)((j_common_ptr) &compress_info, JPOOL_IMAGE, row_stride, 1);
+
+    // Leer la imagen fila por fila de arriba a abajo
+    while (compress_info.output_scanline < compress_info.output_height) {
+        int fila_actual = compress_info.output_scanline;
+        jpeg_read_scanlines(&compress_info, buffer, 1);
+
+        // Mapear los datos del buffer temporal RGB al buffer final de tu estructura PixelRGBA (con Alfa opaco)
+        for (int x = 0; x < imagen->ancho; x++) {
+            int src_idx = x * 3;
+            int dest_idx = (fila_actual * imagen->ancho) + x;
+
+            imagen->pixels[dest_idx].rojo  = buffer[0][src_idx + 0];
+            imagen->pixels[dest_idx].verde = buffer[0][src_idx + 1];
+            imagen->pixels[dest_idx].azul  = buffer[0][src_idx + 2];
+            imagen->pixels[dest_idx].alfa  = 255; // JPEG no tiene transparencia, ponemos opaco por defecto
+        }
+    }
+
+    // Finalizar descompresión y liberar recursos locales
+    jpeg_finish_decompress(&compress_info);
+    jpeg_destroy_decompress(&compress_info);
+    fclose(file);
+
+    return IMG_OK;
+}
+
+void mi_error_exit(j_common_ptr cinfo) {
+    struct mi_error_mgr *myerr = (struct mi_error_mgr *) cinfo->err;
+    (*cinfo->err->output_message) (cinfo);
+    longjmp(myerr->setjmp_buffer, 1);
 }

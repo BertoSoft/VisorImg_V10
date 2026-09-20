@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <jpeglib.h>
+#include <setjmp.h>
 
 // 0.- Ctes Globales
 #define NOMBRE_APP "Visor de Imagenes V1.0"
@@ -69,16 +71,25 @@ typedef enum{
     IMG_DESCONOCIDA
 }TipoImagen;
 
-// 3.- Funciones
+//3.- Extructuras propias de la libreria jpeg
+struct mi_error_mgr {
+    struct jpeg_error_mgr pub;
+    jmp_buf setjmp_buffer;
+};
+
+
+// 4.- Funciones
 
 ERROR_IMG   getRutaImagen(char *ruta, size_t tamano);
 const char *getError(ERROR_IMG error);
 TipoImagen  getTipoImagen(const char *ruta);
 ERROR_IMG   bmpToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
 ERROR_IMG   pngToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
+ERROR_IMG   jpgToImagenBuffer(const char *ruta, ImagenBuffer *imagen);
 ERROR_IMG   imagenBufferToXImage(ImagenBuffer *imagen, XImage *ximage);
 XImage      *initXImage(Display *display, ImagenBuffer *imagen);
 ERROR_IMG   showXImage(Display *display, XImage *ximage);
+void        mi_error_exit(j_common_ptr compres_info);
 
 
 #endif
